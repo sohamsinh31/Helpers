@@ -17,7 +17,7 @@ namespace AssetManagement.Helpers.DB
         /// <summary>
         /// Method <c>GetTableAll</c> gives all columns from table.
         /// </summary>
-        public async Task<DataTable> GetTableCustom(string query, NpgsqlParameter[] parameters)
+        public async Task<DataTable> GetTableCustom(string query, NpgsqlParameter[] parameters = null)
         {
             DataTable dt = new DataTable();
             try
@@ -26,7 +26,7 @@ namespace AssetManagement.Helpers.DB
                 await _con.OpenAsync();
                 using (NpgsqlCommand cm = new NpgsqlCommand(query, _con))
                 {
-                    cm.Parameters.AddRange(parameters);
+                    if (parameters != null) cm.Parameters.AddRange(parameters);
                     NpgsqlDataReader reader = await cm.ExecuteReaderAsync();
                     dt.Load(reader);
                 }
@@ -34,7 +34,7 @@ namespace AssetManagement.Helpers.DB
             catch (Exception ex)
             {
                 LoggerHelper.AppendLog("ERROR", ex.Message);
-                throw new Exception("Exception from GetTableOne :::> \n" + ex.Message + " <::::::>");
+                throw new Exception("Exception from GetTableCustom :::> \n" + ex.Message + " <::::::>");
             }
             return dt;
         }
@@ -60,7 +60,7 @@ namespace AssetManagement.Helpers.DB
             catch (Exception ex)
             {
                 LoggerHelper.AppendLog("ERROR", ex.Message);
-                throw new Exception("Exception from GetTableOne :::> \n" + ex.Message + " <::::::>");
+                throw new Exception("Exception from GetTableAll :::> \n" + ex.Message + " <::::::>");
             }
             return dt;
         }
@@ -116,6 +116,57 @@ namespace AssetManagement.Helpers.DB
             }
             return dt;
         }
+
+        public async Task<DataTable> GetTableWithCondition(string tableName, Dictionary<string, object> conditions = null, string[] columns = null)
+        {
+            DataTable dt = new DataTable();
+            try
+            {
+                // Determine selected columns
+                string columnNames = (columns == null || columns.Length == 0) ? "*" : string.Join(", ", columns);
+
+                // Build the base query
+                string query = $"SELECT {columnNames} FROM {tableName}";
+
+                List<NpgsqlParameter> parameters = new List<NpgsqlParameter>();
+
+                // Add WHERE conditions dynamically
+                if (conditions != null && conditions.Count > 0)
+                {
+                    var whereClauses = new List<string>();
+                    foreach (var condition in conditions)
+                    {
+                        string paramName = $"@{condition.Key}";
+                        whereClauses.Add($"{condition.Key} = {paramName}");
+                        parameters.Add(new NpgsqlParameter(paramName, condition.Value));
+                    }
+                    query += " WHERE " + string.Join(" AND ", whereClauses);
+                }
+
+                Console.WriteLine($"Generated Query: {query}");
+
+                await _con.CloseAsync();
+                await _con.OpenAsync();
+
+                using (NpgsqlCommand cm = new NpgsqlCommand(query, _con))
+                {
+                    if (parameters.Count > 0)
+                        cm.Parameters.AddRange(parameters.ToArray());
+
+                    using (NpgsqlDataReader reader = await cm.ExecuteReaderAsync())
+                    {
+                        dt.Load(reader);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LoggerHelper.AppendLog("ERROR", ex.Message);
+                throw new Exception($"Exception from GetTableWithCondition :::> {ex.Message} <::::::>");
+            }
+            return dt;
+        }
+
 
         public async Task<int> InsertOne(string tablename, string[] colnames, ArrayList values)
         {
